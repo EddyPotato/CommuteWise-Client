@@ -11,66 +11,31 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabase } from "../../lib/supabase";
-import { Star, ArrowRight, Crosshair } from "lucide-react";
+import { Star, ArrowRight, Crosshair, Info } from "lucide-react";
+import { useRouteContext } from "../../contexts/RouteContext";
 
-// --- STYLES (MATCHING ADMIN & GOOGLE MAPS FEEL) ---
+// --- STYLES ---
 const mapStyles = `
-  /* TERMINAL PIN (Large) */
+  /* TERMINAL PIN */
   .custom-terminal-marker {
     background: white;
     border-radius: 50%;
     border: 2px solid white;
     box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 16px;
-    transition: transform 0.2s;
-    z-index: 500 !important;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 16px; transition: transform 0.2s; z-index: 500 !important;
   }
-  .custom-terminal-marker:hover {
-    transform: scale(1.1);
-    z-index: 600 !important;
-  }
+  .custom-terminal-marker:hover { transform: scale(1.1); z-index: 600 !important; }
 
-  /* USER LOCATION (Pulsing Blue Dot) */
-  @keyframes pulse-ring {
-    0% { transform: scale(0.33); opacity: 1; }
-    80%, 100% { opacity: 0; }
-  }
-  @keyframes pulse-dot {
-    0% { transform: scale(0.9); }
-    50% { transform: scale(1); }
-    100% { transform: scale(0.9); }
-  }
+  /* USER LOCATION */
+  @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
+  @keyframes pulse-dot { 0% { transform: scale(0.9); } 50% { transform: scale(1); } 100% { transform: scale(0.9); } }
   
-  .user-location-marker {
-    position: relative;
-    z-index: 9999 !important; /* FORCE ON TOP OF EVERYTHING */
-  }
-  .user-location-marker::before {
-    content: '';
-    position: absolute;
-    left: -20px; top: -20px;
-    width: 64px; height: 64px;
-    background-color: rgba(37, 99, 235, 0.3);
-    border-radius: 50%;
-    animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-  }
-  .user-location-marker::after {
-    content: '';
-    position: absolute;
-    left: 0; top: 0;
-    width: 24px; height: 24px;
-    background-color: #2563eb;
-    border: 3px solid white;
-    border-radius: 50%;
-    animation: pulse-dot 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) -0.4s infinite;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-  }
+  .user-location-marker { position: relative; z-index: 9999 !important; }
+  .user-location-marker::before { content: ''; position: absolute; left: -20px; top: -20px; width: 64px; height: 64px; background-color: rgba(37, 99, 235, 0.3); border-radius: 50%; animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+  .user-location-marker::after { content: ''; position: absolute; left: 0; top: 0; width: 24px; height: 24px; background-color: #2563eb; border: 3px solid white; border-radius: 50%; animation: pulse-dot 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) -0.4s infinite; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
 `;
 
-// Helper: Get Color based on Mode
 const getModeColor = (mode) => {
   switch (mode?.toLowerCase()) {
     case "bus":
@@ -84,27 +49,27 @@ const getModeColor = (mode) => {
   }
 };
 
-// Helper: Create Icon (Only for Terminals)
 const createIcon = (stop) => {
   const type = stop.type?.toLowerCase();
   const vehicles = stop.allowed_vehicles || [];
-
   let color = "#3b82f6";
   let innerHTML = "📍";
 
-  if (vehicles.includes("tricycle")) {
-    color = "#16a34a";
-    innerHTML = "🛺";
-  } else if (vehicles.includes("jeep")) {
-    color = "#7c3aed";
-    innerHTML = "🚙";
-  } else if (vehicles.includes("bus")) {
-    color = "#1e40af";
-    innerHTML = "🚌";
-  } else {
-    color = "#10b981";
-    innerHTML = "📍";
-  } // Default Terminal
+  if (type === "terminal") {
+    if (vehicles.includes("tricycle")) {
+      color = "#16a34a";
+      innerHTML = "🛺";
+    } else if (vehicles.includes("jeep")) {
+      color = "#7c3aed";
+      innerHTML = "🚙";
+    } else if (vehicles.includes("bus")) {
+      color = "#1e40af";
+      innerHTML = "🚌";
+    } else {
+      color = "#eab308";
+      innerHTML = "🏁";
+    }
+  }
 
   return L.divIcon({
     className: "custom-terminal-marker",
@@ -124,8 +89,15 @@ const userIcon = L.divIcon({
 // --- SUB-COMPONENT: Map Controller ---
 const MapController = ({ selectedRoute, userLocation, shouldFlyToUser }) => {
   const map = useMap();
+  const { setMapCenter, setMapZoom } = useRouteContext();
 
-  // Handle Route Zoom
+  useMapEvents({
+    moveend: () => {
+      setMapCenter([map.getCenter().lat, map.getCenter().lng]);
+      setMapZoom(map.getZoom());
+    },
+  });
+
   useEffect(() => {
     if (selectedRoute && selectedRoute.polyline) {
       const geoJsonLayer = L.geoJSON(selectedRoute.polyline);
@@ -134,15 +106,14 @@ const MapController = ({ selectedRoute, userLocation, shouldFlyToUser }) => {
     }
   }, [selectedRoute, map]);
 
-  // Handle "Locate Me" Zoom - Moves map to user when location is found
   useEffect(() => {
-    if (userLocation) {
+    if (userLocation && shouldFlyToUser > 0) {
       map.flyTo([userLocation.lat, userLocation.lng], 16, {
         animate: true,
         duration: 1.5,
       });
     }
-  }, [shouldFlyToUser, userLocation, map]); // Added userLocation to deps to auto-fly on first load
+  }, [shouldFlyToUser, userLocation, map]);
 
   return null;
 };
@@ -158,23 +129,23 @@ const MapEvents = ({ onMapClick }) => {
 };
 
 // --- MAIN COMPONENT ---
-const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
+const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation }) => {
+  const { selectedRoute, mapCenter, mapZoom } = useRouteContext();
   const [stops, setStops] = useState([]);
   const [terminalRoutes, setTerminalRoutes] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [flyTrigger, setFlyTrigger] = useState(0);
 
-  // 1. Fetch ONLY Terminals (Filtered)
+  // 1. Fetch ONLY Terminals
   useEffect(() => {
     const fetchStops = async () => {
       const { data, error } = await supabase
         .from("stops")
         .select("*, lat, lng")
-        .eq("type", "terminal"); // Strict filter for Terminals only
+        .eq("type", "terminal");
 
-      if (error) {
-        console.error("Error fetching stops:", error);
-      } else if (data) {
+      if (error) console.error("Error fetching stops:", error);
+      else if (data) {
         const validData = data
           .map((s) => ({
             ...s,
@@ -188,51 +159,43 @@ const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
     fetchStops();
   }, []);
 
-  // 2. Manual Geolocation (Locate Me)
+  // 2. Manual Geolocation
   const handleLocateMe = () => {
     if (!navigator.geolocation) return alert("Geolocation not supported");
-
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         });
-        setFlyTrigger((prev) => prev + 1); // Trigger zoom
+        setFlyTrigger((prev) => prev + 1);
       },
-      (error) => {
-        console.warn("Location error:", error.message);
-        alert("Please enable location services to see your position.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      () => alert("Please enable location services."),
+      { enableHighAccuracy: true }
     );
   };
 
-  // 3. Auto-Locate on Load (Silent, no alert on fail)
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
+        (pos) =>
           setUserLocation({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-          });
-          // We don't trigger flyTrigger here to avoid annoying jumps on load,
-          // but user location dot will appear.
-        },
+          }),
         () => {},
-        { enableHighAccuracy: false, timeout: 5000 }
+        { enableHighAccuracy: false }
       );
     }
   }, []);
 
-  // 4. Handle Terminal Click
+  // 3. Handle Marker Click - FIXED: Only fetch routes STARTING from this terminal
   const handleMarkerClick = async (terminalId) => {
     setTerminalRoutes([]);
     const { data } = await supabase
       .from("routes")
       .select("*")
-      .or(`source.eq.${terminalId},target.eq.${terminalId}`);
+      .eq("source", terminalId); // STRICT: Only show routes where this terminal is the start point
 
     if (data) {
       setTerminalRoutes(
@@ -247,37 +210,30 @@ const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
   return (
     <>
       <style>{mapStyles}</style>
-
-      {/* FLOATING LOCATE BUTTON */}
       <button
         onClick={handleLocateMe}
         className="absolute bottom-24 right-4 z-[400] bg-white p-3 rounded-full shadow-md text-gray-600 hover:text-blue-600 border border-gray-200 transition-transform active:scale-95 flex items-center justify-center"
-        title="Find My Location"
       >
         <Crosshair size={24} />
       </button>
 
       <MapContainer
-        center={[14.6515, 121.0493]}
-        zoom={14}
+        center={mapCenter}
+        zoom={mapZoom}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
       >
-        {/* TILE LAYER: CartoDB Voyager (Clean, Minimalist, Admin-Style) */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          attribution="&copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-
         <MapController
           selectedRoute={selectedRoute}
           userLocation={userLocation}
           shouldFlyToUser={flyTrigger}
         />
-
         <MapEvents onMapClick={onMapClick} />
 
-        {/* 1. Terminal Routes */}
         {terminalRoutes.map(
           (route) =>
             route.geo && (
@@ -293,8 +249,6 @@ const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
               />
             )
         )}
-
-        {/* 2. Navigation Route */}
         {selectedRoute && selectedRoute.polyline && (
           <GeoJSON
             data={selectedRoute.polyline}
@@ -302,7 +256,6 @@ const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
           />
         )}
 
-        {/* 3. Picker Marker */}
         {isPicking && tempLocation && (
           <Marker
             position={[tempLocation.lat, tempLocation.lng]}
@@ -312,50 +265,42 @@ const MapCanvas = ({ selectedRoute, onMapClick, isPicking, tempLocation }) => {
           </Marker>
         )}
 
-        {/* 4. TERMINAL MARKERS ONLY (Loop through stops) */}
         {!isPicking &&
           stops.map((stop) => (
             <Marker
               key={stop.id}
               position={[stop.lat, stop.lng]}
               icon={createIcon(stop)}
-              eventHandlers={{
-                click: () => handleMarkerClick(stop.id),
-              }}
+              eventHandlers={{ click: () => handleMarkerClick(stop.id) }}
             >
               <Popup className="custom-popup">
-                <div className="p-1 min-w-[150px]">
+                <div className="p-1 min-w-[160px]">
                   <h3 className="font-bold text-gray-800 m-0 text-sm">
                     {stop.name}
                   </h3>
                   <div className="text-xs text-gray-500 capitalize mb-2">
-                    {stop.type.replace("_", " ")}
+                    {stop.type?.replace("_", " ") || "Terminal"}
                   </div>
-
-                  <div className="flex items-center gap-1 mb-2">
-                    <Star
-                      size={12}
-                      className="text-yellow-500 fill-yellow-500"
-                    />
-                    <span className="text-xs font-bold">4.2</span>
-                    <span className="text-xs text-gray-400">(12 reviews)</span>
+                  <div className="flex items-center gap-1 mb-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Star key={i} size={12} className="text-gray-300" />
+                    ))}
+                    <span className="text-xs text-gray-400 font-medium ml-1">
+                      0.0 (0)
+                    </span>
                   </div>
-
                   <button
-                    className="w-full bg-primary text-white text-xs py-1.5 px-3 rounded-md flex items-center justify-center gap-1 hover:bg-emerald-600 transition-colors"
-                    onClick={() =>
-                      alert(`Redirect to Terminal Page: ${stop.id}`)
-                    }
+                    className="w-full bg-white border border-gray-200 text-gray-700 text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors font-semibold shadow-sm"
+                    onClick={() => onViewDetails(stop)}
                   >
-                    View Routes <ArrowRight size={12} />
+                    <Info size={14} className="text-blue-600" /> View Details
                   </button>
                 </div>
               </Popup>
             </Marker>
           ))}
 
-        {/* 5. USER LOCATION (Visible & On Top) */}
-        {userLocation && userLocation.lat && (
+        {userLocation && (
           <Marker
             position={[userLocation.lat, userLocation.lng]}
             icon={userIcon}
