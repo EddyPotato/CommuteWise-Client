@@ -38,4 +38,3 @@ function App() {
 }
 
 export default App;
-// End of src/App.jsx
