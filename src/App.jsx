@@ -1,38 +1,40 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { RouteProvider } from "./contexts/RouteContext"; // Import Provider
+// src/App.jsx
 
-// Layouts
-import MainLayout from "./layouts/MainLayout";
-
-// Pages
-import Home from "./pages/Home";
-import Forum from "./pages/Forum";
-import History from "./pages/History";
-import Account from "./pages/Account";
-
-const Login = () => (
-  <div className="p-10 text-center">Login Page (Coming Soon)</div>
-);
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import MainLayout from './layouts/MainLayout';
+import Auth from './pages/Auth';       // New: Login/Signup Page
+import Home from './pages/Home';
+import History from './pages/History';
+import Account from './pages/Account';
+import Forum from './pages/Forum';     // Community Tab
+import { RouteContextProvider } from './contexts/RouteContext';
 
 function App() {
+  // NOTE: This simple setup uses <Navigate> to handle the / path for now.
+  // In a real app, logic would check if user is authenticated here before navigating to /home.
   return (
-    <RouteProvider>
-      {" "}
-      {/* Wrap everything here */}
-      <BrowserRouter>
+    <RouteContextProvider>
+      <Router>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Home />} />
-            <Route path="forum" element={<Forum />} />
-            <Route path="history" element={<History />} />
-            <Route path="account" element={<Account />} />
+          {/* ROOT PATH: Redirects to Auth page */}
+          <Route path="/" element={<Auth />} />
+
+          {/* MAIN APPLICATION ROUTES (Require Bottom Nav) */}
+          <Route element={<MainLayout />}>
+            {/* Redirect /home root path to /home if needed, or set index. */}
+            <Route path="/home" element={<Home />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/community" element={<Forum />} />
+            <Route path="/account" element={<Account />} />
+            
+            {/* Add a default redirect for unrecognized paths */}
+            <Route path="*" element={<Navigate to="/home" />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+
         </Routes>
-      </BrowserRouter>
-    </RouteProvider>
+      </Router>
+    </RouteContextProvider>
   );
 }
 

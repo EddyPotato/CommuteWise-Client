@@ -4,17 +4,23 @@ import BottomNav from "../components/navigation/BottomNav";
 
 const MainLayout = () => {
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-50">
-      {/* CONTENT AREA (Flex-1 fills remaining space) */}
+    // Use 'dvh' (dynamic viewport height) to handle mobile browser bars correctly
+    <div className="flex flex-col h-dvh w-screen overflow-hidden bg-gray-50">
+      
+      {/* 1. MAIN CONTENT AREA */}
+      {/* flex-1: Takes up all available space ABOVE the nav */}
+      {/* relative: Establishes a positioning context for absolute children (Sheets, Map) */}
       <div className="flex-1 relative overflow-hidden">
-        {/* The Outlet renders the current page (e.g., Home, History) */}
         <Outlet />
       </div>
 
-      {/* BOTTOM NAVIGATION (Fixed height, sits at bottom) */}
+      {/* 2. BOTTOM NAVIGATION */}
+      {/* flex-none: Rigid height, never shrinks */}
+      {/* z-50: Ensures it stays on top if needed, though layout prevents overlap */}
       <div className="flex-none z-50">
         <BottomNav />
       </div>
+
     </div>
   );
 };

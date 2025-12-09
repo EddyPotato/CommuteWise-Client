@@ -1,308 +1,201 @@
-import React, { useState, useEffect } from "react";
-import {
-  Search,
-  MapPin,
-  ArrowLeftRight,
-  X,
-  ChevronLeft,
-  Loader2,
-  Star,
-  Map as MapIcon,
-  Bus
-} from "lucide-react";
-import { useRouteContext } from "../../contexts/RouteContext"; // Access internal stops
+import React, { useState } from "react";
+import { Search, MapPin, X, Map as MapIcon, Bus, Navigation, ArrowRight } from "lucide-react";
+import { useRouteContext } from "../../contexts/RouteContext";
 
 const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }) => {
-  const { graphRef } = useRouteContext(); // Access the graph to search internal terminals
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { graphRef } = useRouteContext();
+  
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
-  const [originCoords, setOriginCoords] = useState(null);
-  const [destCoords, setDestCoords] = useState(null);
+  
+  const [originObj, setOriginObj] = useState(null);
+  const [destObj, setDestObj] = useState(null);
+  
   const [suggestions, setSuggestions] = useState([]);
   const [activeField, setActiveField] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  // --- SEARCH LOGIC (Hybrid: Internal Stops + OSM API) ---
-  const handleInput = async (value, field) => {
+  // --- INTERNAL SEARCH LOGIC ---
+  const handleInput = (value, field) => {
     if (field === "origin") setOrigin(value);
     else setDestination(value);
+    
     setActiveField(field);
 
-    if (value.length > 1) {
-      setLoading(true);
+    if (value.length > 0 && graphRef.current && graphRef.current.stops) {
+      const termLower = value.toLowerCase();
       const results = [];
-
-      // 1. Search Internal Database (Stops/Terminals)
-      if (graphRef.current && graphRef.current.stops) {
-        const termLower = value.toLowerCase();
-        graphRef.current.stops.forEach((stop) => {
-          if (stop.name.toLowerCase().includes(termLower)) {
-            results.push({
-              lat: stop.lat,
-              lon: stop.lng,
-              display_name: stop.name,
-              type: "internal_stop", // Mark as internal
-              details: stop.type || "Transport Terminal"
-            });
-          }
-        });
-      }
-
-      // 2. Search OpenStreetMap (Nominatim)
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-          value
-        )}&format=json&addressdetails=1&limit=5&countrycodes=ph`;
-
-        const res = await fetch(url);
-        if (res.ok) {
-          const osmData = await res.json();
-          // Avoid duplicates if OSM returns the same place as our internal DB
-          osmData.forEach((item) => {
-            if (!results.some(r => r.display_name === item.display_name)) {
-                results.push({
-                    ...item,
-                    type: "osm_location"
-                });
-            }
+      
+      graphRef.current.stops.forEach((stop) => {
+        if (stop.name.toLowerCase().includes(termLower) || stop.type?.toLowerCase().includes(termLower)) {
+          results.push({
+            id: stop.id,
+            name: stop.name,
+            lat: stop.lat,
+            lng: stop.lng,
+            type: stop.type,
+            details: stop.type ? stop.type.replace('_', ' ') : "Transport Terminal"
           });
         }
-      } catch (err) {
-        console.warn("OSM Search unavailable", err);
-      }
-
-      setSuggestions(results);
-      setLoading(false);
+      });
+      setSuggestions(results.slice(0, 5));
     } else {
       setSuggestions([]);
     }
   };
 
   const selectLocation = (item) => {
-    const coords = {
-      lat: parseFloat(item.lat),
-      lng: parseFloat(item.lon),
-      name: item.display_name.split(",")[0], // Short name
-      fullAddress: item.display_name,
-      type: item.type
+    const locationObj = {
+      lat: item.lat,
+      lng: item.lng,
+      name: item.name,
+      id: item.id
     };
 
-    // Update Local State
     if (activeField === "origin") {
-      setOrigin(coords.name);
-      setOriginCoords(coords);
+      setOrigin(item.name);
+      setOriginObj(locationObj);
     } else {
-      setDestination(coords.name);
-      setDestCoords(coords);
+      setDestination(item.name);
+      setDestObj(locationObj);
     }
 
-    // Trigger Parent Callback for Map Markers
     if (onLocationSelect) {
-        onLocationSelect(activeField, coords);
+      onLocationSelect(activeField, locationObj);
     }
-
+    
     setSuggestions([]);
+    setActiveField(null);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!originCoords || !destCoords) {
-      alert("Please select locations from the suggestions list.");
+    if (!originObj || !destObj) {
+      alert("Please select a valid Origin and Destination from the list.");
       return;
     }
-    setIsExpanded(false);
-    onRouteCalculated({ origin: originCoords, destination: destCoords });
+    // Triggers Home.jsx's handleRouteCalculation with selected objects
+    onRouteCalculated({ origin: originObj, destination: destObj });
   };
 
   const handleChooseOnMap = () => {
-    setIsExpanded(false);
     onChooseOnMapMode(activeField || "destination");
+    setActiveField(null);
   };
 
-  // --- RENDER ---
-  if (!isExpanded) {
-    return (
-      <div
-        className="bg-white rounded-lg shadow-md p-4 w-full max-w-md mx-auto pointer-events-auto flex items-center gap-3 border border-gray-100 cursor-text"
-        onClick={() => {
-          setIsExpanded(true);
-          setActiveField("origin");
-        }}
-      >
-        <div className="bg-gray-100 p-2 rounded-full">
-          <Search size={20} className="text-gray-500" />
-        </div>
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-gray-800">Where to?</div>
-          <div className="text-xs text-gray-400 truncate">
-            {destination || "Search destinations, terminals..."}
-          </div>
-        </div>
-        <div className="bg-white border border-gray-200 p-2 rounded-full shadow-sm">
-          <ArrowLeftRight size={16} className="text-blue-500" />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-white z-[60] flex flex-col animate-in fade-in duration-200">
-      <div className="p-4 border-b border-gray-100 shadow-sm bg-white">
-        <div className="flex gap-3 mb-2">
-          <button
-            onClick={() => setIsExpanded(false)}
-            className="p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-full"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          <h2 className="text-lg font-bold text-gray-800 pt-1">
-            Plan your route
-          </h2>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex gap-3 items-start">
-          <div className="flex flex-col items-center gap-1 mt-2.5">
-            <div className="w-4 h-4 rounded-full border-[3px] border-blue-500"></div>
-            <div className="w-0.5 h-8 bg-gray-300 border-l border-dotted border-gray-400"></div>
-            <MapPin size={20} className="text-red-500 fill-red-50" />
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden pointer-events-auto w-full max-w-md mx-auto transition-all">
+      
+      {/* 1. INPUT AREA (Always Visible) */}
+      <div className="p-3">
+        <form onSubmit={handleSubmit} className="flex gap-3 relative">
+          
+          {/* Connector Line */}
+          <div className="flex flex-col items-center pt-3 gap-1 absolute left-3 top-0 h-full pointer-events-none">
+             <div className="w-3 h-3 rounded-full border-[3px] border-blue-500 bg-white shadow-sm"></div>
+             <div className="w-0.5 h-10 bg-gray-200 border-l border-dotted border-gray-400"></div>
+             <MapPin size={16} className="text-red-500 fill-red-50" />
           </div>
 
-          <div className="flex-1 flex flex-col gap-3">
-            <div className="relative">
+          <div className="flex-1 flex flex-col gap-2 pl-8">
+            {/* Origin */}
+            <div className="relative group">
               <input
-                className={`w-full bg-gray-50 p-3 rounded-lg text-sm font-medium outline-none border ${
-                  activeField === "origin"
-                    ? "border-blue-500 bg-white"
-                    : "border-transparent"
-                }`}
-                placeholder="Your Location"
+                className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-blue-500 transition-all placeholder:text-gray-400`}
+                placeholder="Current Location"
                 value={origin}
                 onChange={(e) => handleInput(e.target.value, "origin")}
-                onFocus={() => setActiveField("origin")}
-                autoFocus
+                onFocus={() => {
+                   setActiveField("origin");
+                   if(origin) handleInput(origin, "origin"); 
+                }}
               />
               {origin && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setOrigin("");
-                    setOriginCoords(null);
-                    if(onLocationSelect) onLocationSelect('origin', null); // Clear marker
-                  }}
-                  className="absolute right-3 top-3 text-gray-400"
+                  onClick={() => { setOrigin(""); setOriginObj(null); if(onLocationSelect) onLocationSelect('origin', null); }}
+                  className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                 >
                   <X size={16} />
                 </button>
               )}
             </div>
-            <div className="relative">
+
+            {/* Destination */}
+            <div className="relative group">
               <input
-                className={`w-full bg-gray-50 p-3 rounded-lg text-sm font-medium outline-none border ${
-                  activeField === "destination"
-                    ? "border-red-500 bg-white"
-                    : "border-transparent"
-                }`}
-                placeholder="Choose destination"
+                className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-red-500 transition-all placeholder:text-gray-400`}
+                placeholder="Destination"
                 value={destination}
                 onChange={(e) => handleInput(e.target.value, "destination")}
-                onFocus={() => setActiveField("destination")}
+                onFocus={() => {
+                    setActiveField("destination");
+                    if(destination) handleInput(destination, "destination");
+                }}
               />
               {destination && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setDestination("");
-                    setDestCoords(null);
-                    if(onLocationSelect) onLocationSelect('destination', null); // Clear marker
-                  }}
-                  className="absolute right-3 top-3 text-gray-400"
+                  onClick={() => { setDestination(""); setDestObj(null); if(onLocationSelect) onLocationSelect('destination', null); }}
+                  className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                 >
                   <X size={16} />
                 </button>
               )}
             </div>
           </div>
+          
+          {/* Search Button (Only enabled when both are valid) */}
+          {originObj && destObj && (
+             <button 
+                type="submit"
+                className="self-center p-3 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 active:scale-95 transition-all"
+             >
+                <Search size={20} />
+             </button>
+          )}
         </form>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white">
-        {suggestions.length > 0 ? (
-          <div className="py-2">
-            {loading && (
-              <div className="p-4 text-center text-gray-400 flex justify-center gap-2">
-                <Loader2 className="animate-spin" /> Searching map...
-              </div>
-            )}
-            {suggestions.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-4 p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
-                onClick={() => selectLocation(item)}
-              >
-                <div className={`p-2 rounded-full ${item.type === 'internal_stop' ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                  {item.type === 'internal_stop' ? (
-                      <Bus size={20} className="text-blue-600" />
-                  ) : (
-                      <MapPin size={20} className="text-gray-600" />
-                  )}
+      {/* 2. DROPDOWN SUGGESTIONS (Only when focused) */}
+      {activeField && (
+        <div className="border-t border-gray-100 max-h-[60vh] overflow-y-auto animate-in slide-in-from-top-2">
+            {/* Map Option (Choose on Map) */}
+            <div
+                onClick={handleChooseOnMap}
+                className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer active:bg-blue-100 border-b border-gray-50"
+            >
+                <div className="bg-blue-100 p-2.5 rounded-full text-blue-600">
+                    <MapIcon size={18} />
                 </div>
                 <div>
-                  <div className="font-semibold text-gray-800 text-sm">
-                    {item.display_name.split(",")[0]}
-                  </div>
-                  <div className="text-xs text-gray-500 truncate max-w-[250px]">
-                    {item.type === 'internal_stop' ? (
-                        <span className="text-blue-600 font-medium">Official Terminal • </span>
-                    ) : null}
-                    {item.display_name}
-                  </div>
+                    <div className="text-sm font-semibold text-blue-700">Choose on Map</div>
+                    <div className="text-xs text-blue-500">Tap location manually</div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-2">
-            <div
-              onClick={handleChooseOnMap}
-              className="flex items-center gap-4 p-4 hover:bg-gray-50 cursor-pointer rounded-lg"
-            >
-              <div className="bg-blue-50 p-2 rounded-full">
-                <MapIcon size={20} className="text-blue-600" />
-              </div>
-              <div className="font-medium text-gray-700">Choose on map</div>
             </div>
-            {/* Quick Presets */}
-            <div className="grid grid-cols-2 gap-2 px-2 mt-2 pb-4 border-b border-gray-100">
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100">
-                <div className="bg-white p-1.5 rounded-full shadow-sm">
-                  <Star size={16} className="text-yellow-500 fill-yellow-500" />
-                </div>
-                <span className="text-sm font-semibold text-gray-700">
-                  Home
-                </span>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100">
-                <div className="bg-white p-1.5 rounded-full shadow-sm">
-                  <Star size={16} className="text-gray-400" />
-                </div>
-                <span className="text-sm font-semibold text-gray-700">
-                  Work
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {originCoords && destCoords && !loading && (
-        <div className="p-4 border-t border-gray-100 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-          <button
-            onClick={handleSubmit}
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg"
-          >
-            Search Routes
-          </button>
+            {/* List Results */}
+            {suggestions.map((item) => (
+                <div
+                key={item.id}
+                className="flex items-center gap-4 p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-50"
+                onClick={() => selectLocation(item)}
+                >
+                <div className="bg-emerald-50 p-2.5 rounded-full text-emerald-600">
+                    <Bus size={18} />
+                </div>
+                <div>
+                    <div className="text-sm font-semibold text-gray-800">{item.name}</div>
+                    <div className="text-xs text-gray-500 capitalize">{item.details}</div>
+                </div>
+                </div>
+            ))}
+
+            {/* Empty State */}
+            {suggestions.length === 0 && (origin || destination) && (
+                <div className="p-4 text-center text-gray-400 text-xs">
+                    No matching terminals found.
+                </div>
+            )}
         </div>
       )}
     </div>

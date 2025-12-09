@@ -42,14 +42,33 @@ export class TransportGraph {
     this.stops = new Map();
   }
 
+  // Helper to safely parse coordinates from DB
+  parseCoord(val) {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+        const parsed = parseFloat(val);
+        return isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  }
+
   buildGraph(stopsData, routesData) {
     // 1. Initialize Nodes (Stops)
     stopsData.forEach((stop) => {
+      const lat = this.parseCoord(stop.lat);
+      const lng = this.parseCoord(stop.lng);
+
+      // Validate Coordinates
+      if (lat === null || lng === null) {
+          // console.warn(`Skipping invalid stop: ${stop.name} (${stop.id})`); // Reduced log noise
+          return;
+      }
+
       this.stops.set(stop.id, {
         id: stop.id,
         name: stop.name,
-        lat: parseFloat(stop.lat),
-        lng: parseFloat(stop.lng),
+        lat: lat,
+        lng: lng,
         type: stop.type,
       });
       this.adjacencyList.set(stop.id, []);
@@ -62,7 +81,6 @@ export class TransportGraph {
           const fromId = route.waypoints[i];
           const toId = route.waypoints[i + 1];
 
-          // Ensure both stops exist in the graph before connecting
           if (this.adjacencyList.has(fromId) && this.adjacencyList.has(toId)) {
             const stopA = this.stops.get(fromId);
             const stopB = this.stops.get(toId);
@@ -70,7 +88,7 @@ export class TransportGraph {
             // Calculate Physical Distance (in km)
             const distanceKm = this.calculateDistance(stopA, stopB);
 
-            // Add Edge with details needed for weighting
+            // Add Edge
             this.adjacencyList.get(fromId).push({
               node: toId,
               distance: distanceKm,
@@ -92,7 +110,6 @@ export class TransportGraph {
     const now = new Date();
     const currentHour = now.getHours();
 
-    // Check Traffic Multiplier
     const isRushHour =
       (currentHour >= RUSH_HOUR.am.start && currentHour < RUSH_HOUR.am.end) ||
       (currentHour >= RUSH_HOUR.pm.start && currentHour < RUSH_HOUR.pm.end);
@@ -100,35 +117,25 @@ export class TransportGraph {
     const trafficMultiplier = isRushHour ? 1.5 : 1.0;
     const speed = MODE_SPEEDS[mode?.toLowerCase()] || MODE_SPEEDS.walking;
 
-    // Formula: (Distance / ModeSpeed) * TrafficMultiplier * 60 (to minutes)
     const travelTimeMinutes = (distanceKm / speed) * 60 * trafficMultiplier;
 
-    // Add Boarding Buffer (5 mins)
     return Math.ceil(travelTimeMinutes + BOARDING_BUFFER);
   }
 
-  // --- WEIGHT CALCULATION (Smart Compass Logic) ---
+  // --- WEIGHT CALCULATION ---
   getEdgeWeight(edge, preference) {
-    // Calculate real-time ETA for this specific segment
     const eta = this.calculateDynamicETA(edge.distance, edge.details.mode);
     const fare = edge.details.fare;
 
     switch (preference) {
-      case "cheapest":
-        // Weight = Fare
-        return fare;
-      case "fastest":
-        // Weight = ETA
-        return eta;
+      case "cheapest": return fare;
+      case "fastest": return eta;
       case "recommended":
-      default:
-        // Weight = (Fare * 0.6) + (ETA * 0.4)
-        // Heuristic: We treat 1 Peso ~ 1 Minute of time value for balancing
-        return (fare * 0.6) + (eta * 0.4);
+      default: return (fare * 0.6) + (eta * 0.4);
     }
   }
 
-  // --- NEAREST NODE (First Mile / Last Mile) ---
+  // --- NEAREST NODE ---
   findNearestNode(lat, lng) {
     let nearestNode = null;
     let minDist = Infinity;
@@ -150,7 +157,6 @@ export class TransportGraph {
     const previous = {};
     const pq = new PriorityQueue();
 
-    // Initialize
     this.adjacencyList.forEach((_, key) => {
       if (key === startNodeId) {
         costs[key] = 0;
@@ -174,7 +180,6 @@ export class TransportGraph {
         
         if (neighbors) {
           for (let neighbor of neighbors) {
-            // Calculate dynamic weight based on user preference
             const weight = this.getEdgeWeight(neighbor, preference);
             const candidateCost = costs[currentId] + weight;
 
@@ -184,7 +189,6 @@ export class TransportGraph {
                 node: currentId,
                 details: neighbor.details,
                 distance: neighbor.distance,
-                // Store the calculated ETA for the summary later
                 calculatedEta: this.calculateDynamicETA(neighbor.distance, neighbor.details.mode)
               };
               pq.enqueue(neighbor.node, candidateCost);
@@ -223,7 +227,6 @@ export class TransportGraph {
         distance: prevStep.distance
       });
 
-      // Accumulate totals
       totalFare += prevStep.details.fare;
       totalTime += prevStep.calculatedEta;
       totalDistance += prevStep.distance;
@@ -231,34 +234,25 @@ export class TransportGraph {
       current = prevStep.node;
     }
     
-    // Add start node
     path.push(this.stops.get(current));
 
     return {
-      path: path.reverse(), // Full node list for map plotting
-      segments: segments.reverse(), // Step-by-step instructions
+      path: path.reverse(),
+      segments: segments.reverse(),
       totalDistance: totalDistance,
       totalFare: totalFare,
       totalEta: totalTime,
     };
   }
 
-  // --- UTILS ---
   calculateDistance(stopA, stopB) {
-    const R = 6371; // Earth radius in km
+    const R = 6371; 
     const dLat = this.deg2rad(stopB.lat - stopA.lat);
     const dLon = this.deg2rad(stopB.lng - stopA.lng);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.deg2rad(stopA.lat)) *
-        Math.cos(this.deg2rad(stopB.lat)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(this.deg2rad(stopA.lat)) * Math.cos(this.deg2rad(stopB.lat)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  deg2rad(deg) {
-    return deg * (Math.PI / 180);
-  }
+  deg2rad(deg) { return deg * (Math.PI / 180); }
 }

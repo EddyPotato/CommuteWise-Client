@@ -14,13 +14,12 @@ const TerminalSheet = ({ terminal, onClose }) => {
   const fetchTerminalDetails = async () => {
     setLoading(true);
     try {
-      // FIXED: Only show routes DEPARTING (source) from this terminal
       const { data: routeData } = await supabase
         .from("routes")
         .select(
           `id, route_name, mode, fare, eta_minutes, target_stop:stops!routes_target_fkey(name), source_stop:stops!routes_source_fkey(name)`
         )
-        .eq("source", terminal.id); // Changed from .or()
+        .eq("source", terminal.id);
 
       if (routeData) setRoutes(routeData);
       setReviews({ average: 0, count: 0 });
@@ -33,24 +32,26 @@ const TerminalSheet = ({ terminal, onClose }) => {
 
   const getModeIcon = (mode) => {
     switch (mode?.toLowerCase()) {
-      case "bus":
-        return <Bus size={18} className="text-blue-600" />;
-      case "jeep":
-        return <Bus size={18} className="text-purple-600" />;
-      default:
-        return <Navigation size={18} className="text-green-600" />;
+      case "bus": return <Bus size={18} className="text-blue-600" />;
+      case "jeep": return <Bus size={18} className="text-purple-600" />;
+      default: return <Navigation size={18} className="text-green-600" />;
     }
   };
 
   if (!terminal) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[30] flex flex-col justify-end pointer-events-none h-full">
+    // CHANGED: 'absolute' instead of 'fixed' or inset.
+    // Matches the height of the Content Area.
+    <div className="absolute inset-0 z-[40] flex flex-col justify-end pointer-events-none">
+      
+      {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/10 pointer-events-auto transition-opacity"
+        className="absolute inset-0 bg-black/20 pointer-events-auto transition-opacity"
         onClick={onClose}
       ></div>
 
+      {/* Sheet Content */}
       <div className="bg-white w-full rounded-t-3xl shadow-[0_-5px_30px_rgba(0,0,0,0.1)] pointer-events-auto flex flex-col max-h-[85%] animate-in slide-in-from-bottom-10 duration-300">
         <div className="p-5 border-b border-gray-100 flex justify-between items-start bg-white rounded-t-3xl sticky top-0 z-10">
           <div>
@@ -62,21 +63,8 @@ const TerminalSheet = ({ terminal, onClose }) => {
               <span>{terminal.barangay || "Quezon City"}, Metro Manila</span>
             </div>
             <div className="flex items-center gap-2 mt-3">
-              <div className="flex">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    size={16}
-                    className={`${
-                      star <= Math.round(reviews.average)
-                        ? "fill-yellow-400 text-yellow-400"
-                        : "text-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="text-sm font-medium text-gray-600">
-                {reviews.average.toFixed(1)} ({reviews.count} reviews)
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-bold capitalize">
+                  {terminal.type ? terminal.type.replace('_', ' ') : 'Terminal'}
               </span>
             </div>
           </div>
@@ -88,18 +76,14 @@ const TerminalSheet = ({ terminal, onClose }) => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 bg-gray-50">
+        <div className="flex-1 overflow-y-auto p-5 bg-gray-50 custom-scrollbar">
           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
             Departing Routes ({routes.length})
           </h3>
           {loading ? (
-            <div className="text-center py-10 text-gray-400">
-              Loading routes...
-            </div>
+            <div className="text-center py-10 text-gray-400">Loading routes...</div>
           ) : routes.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 italic">
-              No departing routes available.
-            </div>
+            <div className="text-center py-10 text-gray-400 italic">No departing routes available.</div>
           ) : (
             <div className="flex flex-col gap-3">
               {routes.map((route) => (
@@ -114,8 +98,7 @@ const TerminalSheet = ({ terminal, onClose }) => {
                       </div>
                       <div>
                         <div className="font-bold text-gray-800 text-sm">
-                          {route.route_name ||
-                            `${route.source_stop?.name} → ${route.target_stop?.name}`}
+                          {route.route_name || `${route.source_stop?.name} → ${route.target_stop?.name}`}
                         </div>
                         <div className="text-xs text-gray-500 capitalize">
                           {route.mode} • via {terminal.barangay}
@@ -135,12 +118,6 @@ const TerminalSheet = ({ terminal, onClose }) => {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="p-4 border-t border-gray-100 bg-white sticky bottom-0">
-          <button className="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-lg active:scale-[0.98] transition-transform">
-            Write a Review
-          </button>
         </div>
       </div>
     </div>

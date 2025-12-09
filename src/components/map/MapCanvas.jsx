@@ -11,7 +11,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabase } from "../../lib/supabase";
-import { Star, ArrowRight, Crosshair, Info } from "lucide-react";
+import { Star, Crosshair, Info } from "lucide-react";
 import { useRouteContext } from "../../contexts/RouteContext";
 
 // --- STYLES ---
@@ -27,12 +27,12 @@ const mapStyles = `
   .custom-terminal-marker:hover { transform: scale(1.1); z-index: 600 !important; }
 
   /* SEARCH MARKERS */
-  .origin-marker { background-color: #3b82f6; border-radius: 50%; border: 3px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
+  .origin-marker { background-color: #10b981; border-radius: 50%; border: 3px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
   .dest-marker { background-color: #ef4444; border-radius: 50%; border: 3px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
 
   .user-location-marker { position: relative; z-index: 9999 !important; }
-  .user-location-marker::before { content: ''; position: absolute; left: -20px; top: -20px; width: 64px; height: 64px; background-color: rgba(37, 99, 235, 0.3); border-radius: 50%; animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
-  .user-location-marker::after { content: ''; position: absolute; left: 0; top: 0; width: 24px; height: 24px; background-color: #2563eb; border: 3px solid white; border-radius: 50%; animation: pulse-dot 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) -0.4s infinite; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
+  .user-location-marker::before { content: ''; position: absolute; left: -20px; top: -20px; width: 64px; height: 64px; background-color: rgba(16, 185, 129, 0.3); border-radius: 50%; animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+  .user-location-marker::after { content: ''; position: absolute; left: 0; top: 0; width: 24px; height: 24px; background-color: #10b981; border: 3px solid white; border-radius: 50%; animation: pulse-dot 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) -0.4s infinite; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
 `;
 
 const getModeColor = (mode) => {
@@ -68,7 +68,6 @@ const createIcon = (stop) => {
 
 const userIcon = L.divIcon({ className: "user-location-marker", iconSize: [24, 24], iconAnchor: [12, 12] });
 
-// Search Result Icons
 const originIcon = L.divIcon({
     className: 'custom-div-icon',
     html: `<div class="origin-marker" style="width: 20px; height: 20px;"></div>`,
@@ -80,7 +79,11 @@ const destIcon = L.divIcon({
     iconSize: [20, 20], iconAnchor: [10, 10]
 });
 
-// --- SUB-COMPONENT: Map Controller ---
+// NEW HELPER: Ensures data passed to Leaflet is safe
+const isValidCoordinate = (lat, lng) => {
+    return typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng);
+};
+
 const MapController = ({ selectedRoute, userLocation, shouldFlyToUser, searchMarkers }) => {
   const map = useMap();
   const { setMapCenter, setMapZoom } = useRouteContext();
@@ -92,27 +95,25 @@ const MapController = ({ selectedRoute, userLocation, shouldFlyToUser, searchMar
     },
   });
 
-  // Fit bounds to selected route
   useEffect(() => {
-    if (selectedRoute && selectedRoute.polyline) {
-      const geoJsonLayer = L.geoJSON(selectedRoute.polyline);
+    // Only attempt to fit bounds if polyline data exists
+    if (selectedRoute && selectedRoute.fullPolyline) {
+      const geoJsonLayer = L.geoJSON(selectedRoute.fullPolyline);
       const bounds = geoJsonLayer.getBounds();
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [selectedRoute, map]);
 
-  // Fly to user
   useEffect(() => {
-    if (userLocation && shouldFlyToUser > 0) {
+    if (userLocation && shouldFlyToUser > 0 && isValidCoordinate(userLocation.lat, userLocation.lng)) {
       map.flyTo([userLocation.lat, userLocation.lng], 16, { animate: true, duration: 1.5 });
     }
   }, [shouldFlyToUser, userLocation, map]);
 
-  // Fly to Search Markers (Origin/Dest) as they are selected
   useEffect(() => {
-      if (searchMarkers?.destination) {
+      if (searchMarkers?.destination && isValidCoordinate(searchMarkers.destination.lat, searchMarkers.destination.lng)) {
           map.flyTo([searchMarkers.destination.lat, searchMarkers.destination.lng], 15, { duration: 1 });
-      } else if (searchMarkers?.origin) {
+      } else if (searchMarkers?.origin && isValidCoordinate(searchMarkers.origin.lat, searchMarkers.origin.lng)) {
           map.flyTo([searchMarkers.origin.lat, searchMarkers.origin.lng], 15, { duration: 1 });
       }
   }, [searchMarkers, map]);
@@ -127,8 +128,7 @@ const MapEvents = ({ onMapClick }) => {
   return null;
 };
 
-// --- MAIN COMPONENT ---
-const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchMarkers }) => {
+const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchMarkers, routePolyline }) => {
   const { selectedRoute, mapCenter, mapZoom } = useRouteContext();
   const [stops, setStops] = useState([]);
   const [terminalRoutes, setTerminalRoutes] = useState([]);
@@ -137,9 +137,10 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
 
   useEffect(() => {
     const fetchStops = async () => {
-      const { data, error } = await supabase.from("stops").select("*, lat, lng").eq("type", "terminal");
+      const { data } = await supabase.from("stops").select("*, lat, lng").eq("type", "terminal");
       if (data) {
-        const validData = data.map((s) => ({ ...s, lat: parseFloat(s.lat), lng: parseFloat(s.lng) })).filter((s) => !isNaN(s.lat) && !isNaN(s.lng));
+        const validData = data.map((s) => ({ ...s, lat: parseFloat(s.lat), lng: parseFloat(s.lng) }))
+                              .filter((s) => isValidCoordinate(s.lat, s.lng)); // Filter bad terminals
         setStops(validData);
       }
     };
@@ -158,15 +159,6 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
     );
   };
 
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {}, { enableHighAccuracy: false }
-      );
-    }
-  }, []);
-
   const handleMarkerClick = async (terminalId) => {
     setTerminalRoutes([]);
     const { data } = await supabase.from("routes").select("*").eq("source", terminalId);
@@ -178,7 +170,7 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
   return (
     <>
       <style>{mapStyles}</style>
-      <button onClick={handleLocateMe} className="absolute bottom-24 right-4 z-[400] bg-white p-3 rounded-full shadow-md text-gray-600 hover:text-blue-600 border border-gray-200 transition-transform active:scale-95 flex items-center justify-center">
+      <button onClick={handleLocateMe} className="absolute bottom-24 right-4 z-[400] bg-white p-3 rounded-full shadow-md text-gray-600 hover:text-emerald-600 border border-gray-200 transition-transform active:scale-95 flex items-center justify-center">
         <Crosshair size={24} />
       </button>
 
@@ -201,24 +193,28 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
             </Marker>
         ))}
 
-        {/* Dynamic Search Markers */}
-        {searchMarkers?.origin && (
+        {/* Search Markers - SAFEGUARDED */}
+        {searchMarkers?.origin && isValidCoordinate(searchMarkers.origin.lat, searchMarkers.origin.lng) && (
             <Marker position={[searchMarkers.origin.lat, searchMarkers.origin.lng]} icon={originIcon}>
-                <Popup>Starting Point: {searchMarkers.origin.name}</Popup>
+                <Popup>Origin: {searchMarkers.origin.name}</Popup>
             </Marker>
         )}
-        {searchMarkers?.destination && (
+        {searchMarkers?.destination && isValidCoordinate(searchMarkers.destination.lat, searchMarkers.destination.lng) && (
             <Marker position={[searchMarkers.destination.lat, searchMarkers.destination.lng]} icon={destIcon}>
                 <Popup>Destination: {searchMarkers.destination.name}</Popup>
             </Marker>
         )}
 
-        {/* Polylines */}
+        {/* Routes */}
         {terminalRoutes.map((route) => route.geo && <GeoJSON key={`term-route-${route.id}`} data={route.geo} style={{ color: getModeColor(route.mode), weight: 4, opacity: 0.6, dashArray: "5, 10" }} />)}
-        {selectedRoute && selectedRoute.polyline && <GeoJSON data={selectedRoute.polyline} style={{ color: "#2563eb", weight: 6, opacity: 1 }} />}
+        {selectedRoute && routePolyline && <GeoJSON data={routePolyline} style={{ color: "#2563eb", weight: 6, opacity: 1 }} />}
 
-        {isPicking && tempLocation && <Marker position={[tempLocation.lat, tempLocation.lng]} icon={createIcon({ type: "terminal", allowed_vehicles: [] })}><Popup>Selected Location</Popup></Marker>}
-        {userLocation && <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} zIndexOffset={9999}><Popup>You are here</Popup></Marker>}
+        {isPicking && tempLocation && isValidCoordinate(tempLocation.lat, tempLocation.lng) && (
+             <Marker position={[tempLocation.lat, tempLocation.lng]} icon={createIcon({ type: "terminal", allowed_vehicles: [] })}><Popup>Selected Location</Popup></Marker>
+        )}
+        {userLocation && isValidCoordinate(userLocation.lat, userLocation.lng) && (
+             <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} zIndexOffset={9999}><Popup>You are here</Popup></Marker>
+        )}
       </MapContainer>
     </>
   );
