@@ -1,28 +1,24 @@
 // src/App.jsx
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
-import Auth from './pages/Auth';       // New: Login/Signup Page
+import Auth from './pages/Auth';       
 import Home from './pages/Home';
 import History from './pages/History';
 import Account from './pages/Account';
-import Forum from './pages/Forum';     // Community Tab
-import { RouteContextProvider } from './contexts/RouteContext';
+import Forum from './pages/Forum';     
+import { RouteProvider } from './contexts/RouteContext'; // Corrected Import Name
 
 function App() {
-  // NOTE: This simple setup uses <Navigate> to handle the / path for now.
-  // In a real app, logic would check if user is authenticated here before navigating to /home.
   return (
-    <RouteContextProvider>
+    <RouteProvider>
       <Router>
         <Routes>
           {/* ROOT PATH: Redirects to Auth page */}
           <Route path="/" element={<Auth />} />
 
-          {/* MAIN APPLICATION ROUTES (Require Bottom Nav) */}
+          {/* MAIN APPLICATION ROUTES */}
           <Route element={<MainLayout />}>
-            {/* Redirect /home root path to /home if needed, or set index. */}
             <Route path="/home" element={<Home />} />
             <Route path="/history" element={<History />} />
             <Route path="/community" element={<Forum />} />
@@ -34,7 +30,7 @@ function App() {
 
         </Routes>
       </Router>
-    </RouteContextProvider>
+    </RouteProvider>
   );
 }
 

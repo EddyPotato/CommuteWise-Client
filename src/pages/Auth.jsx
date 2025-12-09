@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { LogIn, UserPlus, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { LogIn, UserPlus, ArrowRight, Loader2, AlertCircle, Navigation, Eye, EyeOff } from 'lucide-react';
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -11,6 +11,8 @@ const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // NEW STATE: Toggle password visibility
+  const [showPassword, setShowPassword] = useState(false); 
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -20,17 +22,14 @@ const Auth = () => {
     try {
       let result;
       if (isSignUp) {
-        // Sign Up: Creates user and adds a default profile entry via RLS/Triggers
         result = await supabase.auth.signUp({ email, password });
       } else {
-        // Login
         result = await supabase.auth.signInWithPassword({ email, password });
       }
 
       if (result.error) {
         setError(result.error.message);
       } else {
-        // Successful login/signup, navigate to Home
         navigate('/home'); 
       }
     } catch (err) {
@@ -41,7 +40,6 @@ const Auth = () => {
   };
 
   const handleGuest = () => {
-    // Guest mode bypasses auth but lacks user-specific features (History, Account)
     navigate('/home'); 
   };
 
@@ -65,15 +63,28 @@ const Auth = () => {
             className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
             disabled={loading}
           />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-            disabled={loading}
-          />
+          
+          {/* PASSWORD INPUT FIELD WITH TOGGLE */}
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full pr-12 px-4 py-3 border border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+              disabled={loading}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
 
           {error && (
             <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
