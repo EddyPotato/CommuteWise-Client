@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   MapPin,
@@ -7,11 +7,13 @@ import {
   ChevronLeft,
   Loader2,
   Star,
-  Clock,
   Map as MapIcon,
+  Bus
 } from "lucide-react";
+import { useRouteContext } from "../../contexts/RouteContext"; // Access internal stops
 
-const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
+const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }) => {
+  const { graphRef } = useRouteContext(); // Access the graph to search internal terminals
   const [isExpanded, setIsExpanded] = useState(false);
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
@@ -21,56 +23,57 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
   const [activeField, setActiveField] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // --- SEARCH API ---
+  // --- SEARCH LOGIC (Hybrid: Internal Stops + OSM API) ---
   const handleInput = async (value, field) => {
     if (field === "origin") setOrigin(value);
     else setDestination(value);
     setActiveField(field);
 
-    if (value.length > 2) {
+    if (value.length > 1) {
       setLoading(true);
+      const results = [];
+
+      // 1. Search Internal Database (Stops/Terminals)
+      if (graphRef.current && graphRef.current.stops) {
+        const termLower = value.toLowerCase();
+        graphRef.current.stops.forEach((stop) => {
+          if (stop.name.toLowerCase().includes(termLower)) {
+            results.push({
+              lat: stop.lat,
+              lon: stop.lng,
+              display_name: stop.name,
+              type: "internal_stop", // Mark as internal
+              details: stop.type || "Transport Terminal"
+            });
+          }
+        });
+      }
+
+      // 2. Search OpenStreetMap (Nominatim)
       try {
-        // Updated URL with specific params to avoid blocks
         const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
           value
         )}&format=json&addressdetails=1&limit=5&countrycodes=ph`;
 
         const res = await fetch(url);
-
-        if (!res.ok) throw new Error("Search failed");
-
-        const data = await res.json();
-        setSuggestions(data || []);
+        if (res.ok) {
+          const osmData = await res.json();
+          // Avoid duplicates if OSM returns the same place as our internal DB
+          osmData.forEach((item) => {
+            if (!results.some(r => r.display_name === item.display_name)) {
+                results.push({
+                    ...item,
+                    type: "osm_location"
+                });
+            }
+          });
+        }
       } catch (err) {
-        console.warn("Geocoding API unavailable, using fallback mode.");
-        // Fallback for demo purposes if API is blocked
-        setSuggestions(
-          [
-            {
-              lat: 14.6515,
-              lon: 121.0493,
-              display_name: "Quezon City Circle (Demo)",
-              type: "park",
-            },
-            {
-              lat: 14.676,
-              lon: 121.0437,
-              display_name: "SM North EDSA (Demo)",
-              type: "mall",
-            },
-            {
-              lat: 14.7011,
-              lon: 121.0328,
-              display_name: "Sauyo Market (Demo)",
-              type: "market",
-            },
-          ].filter((i) =>
-            i.display_name.toLowerCase().includes(value.toLowerCase())
-          )
-        );
-      } finally {
-        setLoading(false);
+        console.warn("OSM Search unavailable", err);
       }
+
+      setSuggestions(results);
+      setLoading(false);
     } else {
       setSuggestions([]);
     }
@@ -80,10 +83,12 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
     const coords = {
       lat: parseFloat(item.lat),
       lng: parseFloat(item.lon),
-      name: item.display_name.split(",")[0],
+      name: item.display_name.split(",")[0], // Short name
       fullAddress: item.display_name,
+      type: item.type
     };
 
+    // Update Local State
     if (activeField === "origin") {
       setOrigin(coords.name);
       setOriginCoords(coords);
@@ -91,6 +96,12 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
       setDestination(coords.name);
       setDestCoords(coords);
     }
+
+    // Trigger Parent Callback for Map Markers
+    if (onLocationSelect) {
+        onLocationSelect(activeField, coords);
+    }
+
     setSuggestions([]);
   };
 
@@ -177,6 +188,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
                   onClick={() => {
                     setOrigin("");
                     setOriginCoords(null);
+                    if(onLocationSelect) onLocationSelect('origin', null); // Clear marker
                   }}
                   className="absolute right-3 top-3 text-gray-400"
                 >
@@ -202,6 +214,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
                   onClick={() => {
                     setDestination("");
                     setDestCoords(null);
+                    if(onLocationSelect) onLocationSelect('destination', null); // Clear marker
                   }}
                   className="absolute right-3 top-3 text-gray-400"
                 >
@@ -227,14 +240,21 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
                 className="flex items-center gap-4 p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
                 onClick={() => selectLocation(item)}
               >
-                <div className="bg-gray-100 p-2 rounded-full">
-                  <MapPin size={20} className="text-gray-600" />
+                <div className={`p-2 rounded-full ${item.type === 'internal_stop' ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                  {item.type === 'internal_stop' ? (
+                      <Bus size={20} className="text-blue-600" />
+                  ) : (
+                      <MapPin size={20} className="text-gray-600" />
+                  )}
                 </div>
                 <div>
                   <div className="font-semibold text-gray-800 text-sm">
                     {item.display_name.split(",")[0]}
                   </div>
                   <div className="text-xs text-gray-500 truncate max-w-[250px]">
+                    {item.type === 'internal_stop' ? (
+                        <span className="text-blue-600 font-medium">Official Terminal • </span>
+                    ) : null}
                     {item.display_name}
                   </div>
                 </div>
@@ -252,6 +272,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
               </div>
               <div className="font-medium text-gray-700">Choose on map</div>
             </div>
+            {/* Quick Presets */}
             <div className="grid grid-cols-2 gap-2 px-2 mt-2 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100">
                 <div className="bg-white p-1.5 rounded-full shadow-sm">
@@ -274,7 +295,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode }) => {
         )}
       </div>
 
-      {origin && destination && !loading && (
+      {originCoords && destCoords && !loading && (
         <div className="p-4 border-t border-gray-100 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
           <button
             onClick={handleSubmit}
