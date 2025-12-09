@@ -17,17 +17,19 @@ const Account = () => {
 
       if (session) {
         // Fetch user profile from the public.profiles table
+        // FIXED: Removed .single() to prevent 406 error when profile is missing or query fails.
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', session.user.id)
-          .single();
+          .eq('id', session.user.id); 
 
         if (error) {
           console.error("Error fetching profile:", error.message);
           setProfile(null);
+        } else if (data && data.length > 0) { // Safely check if data array has results
+          setProfile(data[0]); // Use the first result
         } else {
-          setProfile(data);
+          setProfile(null); // No profile found
         }
       }
       setLoading(false);

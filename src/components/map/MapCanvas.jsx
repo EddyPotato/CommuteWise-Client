@@ -11,22 +11,24 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabase } from "../../lib/supabase";
-import { Crosshair } from "lucide-react";
+import { Crosshair, Info } from "lucide-react";
 import { useRouteContext } from "../../contexts/RouteContext";
-import StopMarker from "./StopMarker"; // New Component
-import UserLocationMarker from "./UserLocationMarker"; // New Component
-// Assume mapUtils is created based on step 1
-import { isValidCoordinate } from "../../utils/mapUtils"; 
+import StopMarker from "./StopMarker"; // Assumed componentized
+import UserLocationMarker from "./UserLocationMarker"; // Assumed componentized
+import { isValidCoordinate } from "../../utils/mapUtils"; // Assumed utility
 
 // --- STYLES ---
 const mapStyles = `
   .custom-terminal-marker { background: white; border-radius: 50%; border: 2px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; font-size: 16px; transition: transform 0.2s; z-index: 500 !important; }
   .custom-terminal-marker:hover { transform: scale(1.1); z-index: 600 !important; }
+
+  /* SEARCH MARKERS */
   .origin-marker { background-color: #10b981; border-radius: 50%; border: 3px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
   .dest-marker { background-color: #ef4444; border-radius: 50%; border: 3px solid white; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
+
+  .user-location-marker { position: relative; z-index: 9999 !important; }
   @keyframes pulse-ring { 0% { transform: scale(0.33); opacity: 1; } 80%, 100% { opacity: 0; } }
   @keyframes pulse-dot { 0% { transform: scale(0.9); } 50% { transform: scale(1); } 100% { transform: scale(0.9); } }
-  .user-location-marker { position: relative; z-index: 9999 !important; }
   .user-location-marker::before { content: ''; position: absolute; left: -20px; top: -20px; width: 64px; height: 64px; background-color: rgba(16, 185, 129, 0.3); border-radius: 50%; animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
   .user-location-marker::after { content: ''; position: absolute; left: 0; top: 0; width: 24px; height: 24px; background-color: #10b981; border: 3px solid white; border-radius: 50%; animation: pulse-dot 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) -0.4s infinite; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
 `;
@@ -110,18 +112,36 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
   }, []);
 
   const handleLocateMe = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported");
+    if (!navigator.geolocation) return alert("Geolocation not supported by your browser.");
+    
+    // Clear old location display while attempting new fetch
+    setUserLocation(null);
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        // SUCCESS: Permission granted, location found
         setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
         setFlyTrigger((prev) => prev + 1);
       },
-      () => alert("Please enable location services."),
-      { enableHighAccuracy: true }
+      (error) => {
+        // FAILURE: Permission denied or acquisition failed (Handles the "asking of permission")
+        if (error.code === error.PERMISSION_DENIED) {
+            alert("Location permission denied. Please allow location access in your browser settings to use this feature.");
+        } else if (error.code === error.TIMEOUT) {
+            alert("Geolocation request timed out. Please check your signal and try again.");
+        } else {
+            alert("Could not get location. Ensure location services are enabled.");
+        }
+      },
+      { 
+          enableHighAccuracy: true,
+          timeout: 10000, 
+          maximumAge: 0 
+      }
     );
   };
 
-  const handleTerminalRouteClick = async (terminalId) => {
+  const handleMarkerClick = async (terminalId) => {
     setTerminalRoutes([]);
     const { data } = await supabase.from("routes").select("*").eq("source", terminalId);
     if (data) {
@@ -141,13 +161,13 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
         <MapController selectedRoute={selectedRoute} userLocation={userLocation} shouldFlyToUser={flyTrigger} searchMarkers={searchMarkers} />
         <MapEvents onMapClick={onMapClick} />
 
-        {/* Terminals (Using StopMarker) */}
+        {/* Terminals */}
         {!isPicking && stops.map((stop) => (
             <StopMarker 
                 key={stop.id} 
                 stop={stop} 
                 onViewDetails={onViewDetails}
-                onMarkerClick={handleTerminalRouteClick}
+                onMarkerClick={handleMarkerClick}
             />
         ))}
 
@@ -172,7 +192,7 @@ const MapCanvas = ({ onMapClick, onViewDetails, isPicking, tempLocation, searchM
              <Marker position={[tempLocation.lat, tempLocation.lng]} icon={originIcon}><Popup>Selected Location</Popup></Marker>
         )}
         
-        {/* User Location Marker (Using UserLocationMarker) */}
+        {/* User Location Marker */}
         <UserLocationMarker userLocation={userLocation} />
 
       </MapContainer>
