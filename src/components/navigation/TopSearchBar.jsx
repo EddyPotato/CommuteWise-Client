@@ -1,4 +1,4 @@
-// eddypotato/commutewise-client/CommuteWise-Client-79244f8b8eabeaf741bab2f95d3558df4ef024be/src/components/navigation/TopSearchBar.jsx
+// src/components/navigation/TopSearchBar.jsx
 
 import React, { useState } from "react";
 import { Search, MapPin, X, Map as MapIcon, Bus, Navigation, ArrowRight } from "lucide-react";
@@ -23,10 +23,12 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
     
     setActiveField(field);
 
+    // CHECK IF GRAPH DATA IS READY AND INPUT IS NOT EMPTY
     if (value.length > 0 && graphRef.current && graphRef.current.stops) {
       const termLower = value.toLowerCase();
       const results = [];
       
+      // SEARCH ONLY AGAINST ADMIN-INPUTTED STOPS/TERMINALS
       graphRef.current.stops.forEach((stop) => {
         if (stop.name.toLowerCase().includes(termLower) || stop.type?.toLowerCase().includes(termLower)) {
           results.push({
@@ -46,6 +48,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
   };
 
   const selectLocation = (item) => {
+    // CREATE LOCATION OBJECT BASED ON SELECTED TERMINAL
     const locationObj = {
       lat: item.lat,
       lng: item.lng,
@@ -61,21 +64,24 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
       setDestObj(locationObj);
     }
 
+    // UPDATE MAP MARKERS IN HOME.JSX
     if (onLocationSelect) {
       onLocationSelect(activeField, locationObj);
     }
     
+    // CLOSE SUGGESTIONS DROPDOWN
     setSuggestions([]);
     setActiveField(null);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    // VALIDATE THAT BOTH LOCATIONS ARE SELECTED (OBJECTS ARE PRESENT)
     if (!originObj || !destObj) {
       alert("Please select a valid Origin and Destination from the list.");
       return;
     }
-    // Triggers Home.jsx's handleRouteCalculation with selected objects
+    // TRIGGER ROUTING ALGORITHM IN HOME.JSX
     onRouteCalculated({ origin: originObj, destination: destObj });
   };
 
@@ -112,6 +118,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
                    onChange={(e) => handleInput(e.target.value, "origin")}
                    onFocus={() => {
                       setActiveField("origin");
+                      // RE-POPULATE SUGGESTIONS ON FOCUS IF INPUT IS NOT EMPTY
                       if(origin) handleInput(origin, "origin"); 
                    }}
                  />
@@ -135,6 +142,7 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
                    onChange={(e) => handleInput(e.target.value, "destination")}
                    onFocus={() => {
                        setActiveField("destination");
+                       // RE-POPULATE SUGGESTIONS ON FOCUS IF INPUT IS NOT EMPTY
                        if(destination) handleInput(destination, "destination");
                    }}
                  />
@@ -151,7 +159,6 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
              </div>
           </div>
           
-          {/* REMOVED OLD ICON-ONLY BUTTON. ADDED NEW PROMINENT BUTTON */}
           {/* NEW: SEARCH ROUTES BUTTON. ONLY SHOWS WHEN BOTH LOCATIONS ARE SET AND NOT ACTIVELY TYPING/SEARCHING */}
           {originObj && destObj && !activeField && (
              <button 
