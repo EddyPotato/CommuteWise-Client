@@ -1,3 +1,5 @@
+// eddypotato/commutewise-client/CommuteWise-Client-79244f8b8eabeaf741bab2f95d3558df4ef024be/src/components/navigation/TopSearchBar.jsx
+
 import React, { useState } from "react";
 import { Search, MapPin, X, Map as MapIcon, Bus, Navigation, ArrowRight } from "lucide-react";
 import { useRouteContext } from "../../contexts/RouteContext";
@@ -87,70 +89,76 @@ const TopSearchBar = ({ onRouteCalculated, onChooseOnMapMode, onLocationSelect }
       
       {/* 1. INPUT AREA (Always Visible) */}
       <div className="p-3">
-        <form onSubmit={handleSubmit} className="flex gap-3 relative">
+        {/* MODIFIED: REMOVED 'flex gap-3' FROM THE FORM CLASSNAME TO ALLOW VERTICAL STACKING */}
+        <form onSubmit={handleSubmit} className="space-y-3 relative">
           
-          {/* Connector Line */}
-          <div className="flex flex-col items-center pt-3 gap-1 absolute left-3 top-0 h-full pointer-events-none">
-             <div className="w-3 h-3 rounded-full border-[3px] border-blue-500 bg-white shadow-sm"></div>
-             <div className="w-0.5 h-10 bg-gray-200 border-l border-dotted border-gray-400"></div>
-             <MapPin size={16} className="text-red-500 fill-red-50" />
-          </div>
+          {/* NEW WRAPPER TO MAINTAIN LAYOUT OF INPUTS AND CONNECTOR LINE */}
+          <div className="flex relative">
+            
+             {/* CONNECTOR LINE - ABSOLUTE POSITIONED RELATIVE TO THIS NEW WRAPPER */}
+             <div className="flex flex-col items-center pt-3 gap-1 absolute left-3 top-0 h-full pointer-events-none">
+                <div className="w-3 h-3 rounded-full border-[3px] border-blue-500 bg-white shadow-sm"></div>
+                <div className="w-0.5 h-10 bg-gray-200 border-l border-dotted border-gray-400"></div>
+                <MapPin size={16} className="text-red-500 fill-red-50" />
+             </div>
 
-          <div className="flex-1 flex flex-col gap-2 pl-8">
-            {/* Origin */}
-            <div className="relative group">
-              <input
-                className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-blue-500 transition-all placeholder:text-gray-400`}
-                placeholder="Current Location"
-                value={origin}
-                onChange={(e) => handleInput(e.target.value, "origin")}
-                onFocus={() => {
-                   setActiveField("origin");
-                   if(origin) handleInput(origin, "origin"); 
-                }}
-              />
-              {origin && (
-                <button
-                  type="button"
-                  onClick={() => { setOrigin(""); setOriginObj(null); if(onLocationSelect) onLocationSelect('origin', null); }}
-                  className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
+             <div className="flex-1 flex flex-col gap-2 pl-8">
+               {/* Origin */}
+               <div className="relative group">
+                 <input
+                   className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-blue-500 transition-all placeholder:text-gray-400`}
+                   placeholder="Current Location"
+                   value={origin}
+                   onChange={(e) => handleInput(e.target.value, "origin")}
+                   onFocus={() => {
+                      setActiveField("origin");
+                      if(origin) handleInput(origin, "origin"); 
+                   }}
+                 />
+                 {origin && (
+                   <button
+                     type="button"
+                     onClick={() => { setOrigin(""); setOriginObj(null); if(onLocationSelect) onLocationSelect('origin', null); }}
+                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                   >
+                     <X size={16} />
+                   </button>
+                 )}
+               </div>
 
-            {/* Destination */}
-            <div className="relative group">
-              <input
-                className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-red-500 transition-all placeholder:text-gray-400`}
-                placeholder="Destination"
-                value={destination}
-                onChange={(e) => handleInput(e.target.value, "destination")}
-                onFocus={() => {
-                    setActiveField("destination");
-                    if(destination) handleInput(destination, "destination");
-                }}
-              />
-              {destination && (
-                <button
-                  type="button"
-                  onClick={() => { setDestination(""); setDestObj(null); if(onLocationSelect) onLocationSelect('destination', null); }}
-                  className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
+               {/* Destination */}
+               <div className="relative group">
+                 <input
+                   className={`w-full bg-gray-50 text-sm font-medium py-2.5 px-3 rounded-lg outline-none border border-transparent focus:bg-white focus:border-red-500 transition-all placeholder:text-gray-400`}
+                   placeholder="Destination"
+                   value={destination}
+                   onChange={(e) => handleInput(e.target.value, "destination")}
+                   onFocus={() => {
+                       setActiveField("destination");
+                       if(destination) handleInput(destination, "destination");
+                   }}
+                 />
+                 {destination && (
+                   <button
+                     type="button"
+                     onClick={() => { setDestination(""); setDestObj(null); if(onLocationSelect) onLocationSelect('destination', null); }}
+                     className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
+                   >
+                     <X size={16} />
+                   </button>
+                 )}
+               </div>
+             </div>
           </div>
           
-          {/* Search Button (Only enabled when both are valid) */}
-          {originObj && destObj && (
+          {/* REMOVED OLD ICON-ONLY BUTTON. ADDED NEW PROMINENT BUTTON */}
+          {/* NEW: SEARCH ROUTES BUTTON. ONLY SHOWS WHEN BOTH LOCATIONS ARE SET AND NOT ACTIVELY TYPING/SEARCHING */}
+          {originObj && destObj && !activeField && (
              <button 
                 type="submit"
-                className="self-center p-3 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 active:scale-95 transition-all"
+                className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-2"
              >
-                <Search size={20} />
+                <Search size={20} /> Search Routes
              </button>
           )}
         </form>
